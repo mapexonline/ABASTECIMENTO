@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Abastecimento Gol G5 (Offline)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-4 min-h-screen flex flex-col justify-between">
+  <div class="max-w-xl mx-auto bg-white shadow-xl rounded-2xl p-6">
+    <h1 class="text-2xl font-bold mb-4">Abastecimento Gol G5</h1>
+    <form id="form" class="grid gap-4">
+      <div><label class="block font-medium">Data</label><input type="date" id="data" class="w-full border rounded px-3 py-2" required /></div>
+      <div><label class="block font-medium">Valor (R$)</label><input type="number" id="valor" step="0.01" class="w-full border rounded px-3 py-2" value="100.00" required /></div>
+      <div><label class="block font-medium">Tipo</label><select id="tipo" class="w-full border rounded px-3 py-2"><option value="despesa" selected>Despesa</option><option value="receita">Receita</option></select></div>
+      <div><label class="block font-medium">Descrição</label><input type="text" id="descricao" class="w-full border rounded px-3 py-2" value="abastecimento" required /></div>
+      <button id="botao" type="submit" class="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700">Adicionar</button>
+    </form>
+    <hr class="my-6" />
+    <div><h2 class="text-xl font-semibold mb-2">Transações</h2><ul id="lista" class="space-y-2"></ul></div>
+    <div class="mt-6 p-4 bg-gray-100 rounded">
+      <p><strong>Receitas:</strong> R$ <span id="totalReceita">0.00</span></p>
+      <p><strong>Despesas:</strong> R$ <span id="totalDespesa">0.00</span></p>
+      <p><strong>Saldo:</strong> R$ <span id="saldo">0.00</span></p>
+    </div>
+  </div>
+  <footer class="text-center mt-10 text-sm text-gray-500">Contato: <a href="mailto:mapexonline22@gmail.com" class="underline">mapexonline22@gmail.com</a></footer>
+  <script>
+    const form = document.getElementById('form');
+    const lista = document.getElementById('lista');
+    const totalReceita = document.getElementById('totalReceita');
+    const totalDespesa = document.getElementById('totalDespesa');
+    const saldo = document.getElementById('saldo');
+    const botao = document.getElementById('botao');
+    function getHoje() { return new Date().toISOString().split('T')[0]; }
+    document.getElementById('data').value = getHoje();
+    let transacoes = JSON.parse(localStorage.getItem('transacoes') || '[]');
+    let editando = null;
+    function salvar() { localStorage.setItem('transacoes', JSON.stringify(transacoes)); }
+    function atualizarResumo() {
+      const receitas = transacoes.filter(t => t.tipo === 'receita').reduce((s, t) => s + Number(t.valor), 0);
+      const despesas = transacoes.filter(t => t.tipo === 'despesa').reduce((s, t) => s + Number(t.valor), 0);
+      totalReceita.textContent = receitas.toFixed(2);
+      totalDespesa.textContent = despesas.toFixed(2);
+      saldo.textContent = (receitas - despesas).toFixed(2);
+    }
+    function renderizarLista() {
+      lista.innerHTML = '';
+      transacoes.forEach((t, i) => {
+        const li = document.createElement('li');
+        li.className = 'flex justify-between items-center border-b pb-1';
+        li.innerHTML = `<span>${t.data} (${t.tipo}) - ${t.descricao}</span>
+          <span class="flex items-center gap-2">
+            <span>R$ ${Number(t.valor).toFixed(2)}</span>
+            <button class="text-blue-600 underline text-sm" onclick="editarTransacao(${i})">Editar</button>
+            <button class="text-red-600 underline text-sm" onclick="excluirTransacao(${i})">Excluir</button>
+          </span>`;
+        lista.appendChild(li);
+      });
+    }
+    window.editarTransacao = function (i) {
+      const t = transacoes[i];
+      document.getElementById('data').value = t.data;
+      document.getElementById('valor').value = t.valor;
+      document.getElementById('tipo').value = t.tipo;
+      document.getElementById('descricao').value = t.descricao;
+      editando = i;
+      botao.textContent = 'Salvar edição';
+    };
+    window.excluirTransacao = function (i) {
+      if (confirm('Deseja excluir esta transação?')) {
+        transacoes.splice(i, 1);
+        salvar();
+        atualizarResumo();
+        renderizarLista();
+      }
+    }
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      const data = document.getElementById('data').value;
+      const valor = parseFloat(document.getElementById('valor').value);
+      const tipo = document.getElementById('tipo').value;
+      const descricao = document.getElementById('descricao').value;
+      if (editando !== null) {
+        transacoes[editando] = { data, valor, tipo, descricao };
+        editando = null;
+        botao.textContent = 'Adicionar';
+      } else {
+        transacoes.push({ data, valor, tipo, descricao });
+      }
+      salvar(); atualizarResumo(); renderizarLista(); form.reset();
+      document.getElementById('data').value = getHoje();
+      document.getElementById('valor').value = 100.00;
+      document.getElementById('tipo').value = 'despesa';
+      document.getElementById('descricao').value = 'abastecimento';
+    });
+    atualizarResumo();
+    renderizarLista();
+  </script>
+</body>
+</html>
