@@ -1,101 +1,143 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Abastecimento Gol G5 (Offline)</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="UTF-8">
+  <title>Controle de Abastecimento - Firebase (V4)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 2rem; background: #f9f9f9; }
+    form { display: flex; flex-direction: column; max-width: 400px; margin: auto; gap: 0.5rem; }
+    input, select, button { padding: 10px; font-size: 1rem; }
+    .saldo { text-align: center; font-size: 1.2rem; margin-top: 1rem; }
+    .lista { max-width: 600px; margin: 2rem auto 0 auto; }
+    .item { background: white; padding: 1rem; margin-bottom: 10px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); position: relative; display: flex; flex-direction: column; gap: 0.5rem; }
+    .botoes { display: flex; gap: 0.5rem; }
+    .botoes button { flex: 1; padding: 8px; font-size: 0.9rem; border: none; border-radius: 5px; cursor: pointer; color: white; }
+    .editar { background-color: #06d6a0; }
+    .excluir { background-color: #e63946; }
+    footer { text-align: center; margin-top: 2rem; color: #666; font-size: 0.9rem; }
+    .mensagem { text-align: center; margin-top: 1rem; font-size: 1rem; color: red; }
+  </style>
 </head>
-<body class="bg-gray-100 p-4 min-h-screen flex flex-col justify-between">
-  <div class="max-w-xl mx-auto bg-white shadow-xl rounded-2xl p-6">
-    <h1 class="text-2xl font-bold mb-4">Abastecimento Gol G5</h1>
-    <form id="form" class="grid gap-4">
-      <div><label class="block font-medium">Data</label><input type="date" id="data" class="w-full border rounded px-3 py-2" required /></div>
-      <div><label class="block font-medium">Valor (R$)</label><input type="number" id="valor" step="0.01" class="w-full border rounded px-3 py-2" value="100.00" required /></div>
-      <div><label class="block font-medium">Tipo</label><select id="tipo" class="w-full border rounded px-3 py-2"><option value="despesa" selected>Despesa</option><option value="receita">Receita</option></select></div>
-      <div><label class="block font-medium">Descrição</label><input type="text" id="descricao" class="w-full border rounded px-3 py-2" value="abastecimento" required /></div>
-      <button id="botao" type="submit" class="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700">Adicionar</button>
-    </form>
-    <hr class="my-6" />
-    <div><h2 class="text-xl font-semibold mb-2">Transações</h2><ul id="lista" class="space-y-2"></ul></div>
-    <div class="mt-6 p-4 bg-gray-100 rounded">
-      <p><strong>Receitas:</strong> R$ <span id="totalReceita">0.00</span></p>
-      <p><strong>Despesas:</strong> R$ <span id="totalDespesa">0.00</span></p>
-      <p><strong>Saldo:</strong> R$ <span id="saldo">0.00</span></p>
-    </div>
-  </div>
-  <footer class="text-center mt-10 text-sm text-gray-500">Contato: <a href="mailto:mapexonline22@gmail.com" class="underline">mapexonline22@gmail.com</a></footer>
+<body>
+  <h1 style="text-align:center">Controle de Abastecimento - Firebase (V4)</h1>
+
+  <form id="form-transacao">
+    <input type="date" id="data" required />
+    <input type="number" id="valor" placeholder="Valor" required />
+    <select id="tipo">
+      <option value="receita">Receita</option>
+      <option value="despesa">Despesa</option>
+    </select>
+    <input type="text" id="descricao" placeholder="Descrição" required />
+    <button type="submit">Adicionar</button>
+  </form>
+
+  <div class="mensagem" id="mensagem"></div>
+  <div class="saldo" id="saldo"></div>
+  <div class="lista" id="lista-transacoes"></div>
+
+  <footer>Desenvolvido por mapexonline22@gmail.com</footer>
+
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
   <script>
-    const form = document.getElementById('form');
-    const lista = document.getElementById('lista');
-    const totalReceita = document.getElementById('totalReceita');
-    const totalDespesa = document.getElementById('totalDespesa');
-    const saldo = document.getElementById('saldo');
-    const botao = document.getElementById('botao');
-    function getHoje() { return new Date().toISOString().split('T')[0]; }
-    document.getElementById('data').value = getHoje();
-    let transacoes = JSON.parse(localStorage.getItem('transacoes') || '[]');
-    let editando = null;
-    function salvar() { localStorage.setItem('transacoes', JSON.stringify(transacoes)); }
-    function atualizarResumo() {
-      const receitas = transacoes.filter(t => t.tipo === 'receita').reduce((s, t) => s + Number(t.valor), 0);
-      const despesas = transacoes.filter(t => t.tipo === 'despesa').reduce((s, t) => s + Number(t.valor), 0);
-      totalReceita.textContent = receitas.toFixed(2);
-      totalDespesa.textContent = despesas.toFixed(2);
-      saldo.textContent = (receitas - despesas).toFixed(2);
-    }
-    function renderizarLista() {
-      lista.innerHTML = '';
-      transacoes.forEach((t, i) => {
-        const li = document.createElement('li');
-        li.className = 'flex justify-between items-center border-b pb-1';
-        li.innerHTML = `<span>${t.data} (${t.tipo}) - ${t.descricao}</span>
-          <span class="flex items-center gap-2">
-            <span>R$ ${Number(t.valor).toFixed(2)}</span>
-            <button class="text-blue-600 underline text-sm" onclick="editarTransacao(${i})">Editar</button>
-            <button class="text-red-600 underline text-sm" onclick="excluirTransacao(${i})">Excluir</button>
-          </span>`;
-        lista.appendChild(li);
-      });
-    }
-    window.editarTransacao = function (i) {
-      const t = transacoes[i];
-      document.getElementById('data').value = t.data;
-      document.getElementById('valor').value = t.valor;
-      document.getElementById('tipo').value = t.tipo;
-      document.getElementById('descricao').value = t.descricao;
-      editando = i;
-      botao.textContent = 'Salvar edição';
+    const firebaseConfig = {
+      apiKey: "AIzaSyA-2bGtSflRF9P8NKU1eU8BKkP-7Qw_16Y",
+      authDomain: "abastecimento-gol-g5.firebaseapp.com",
+      projectId: "abastecimento-gol-g5",
+      storageBucket: "abastecimento-gol-g5.firebasestorage.app",
+      messagingSenderId: "81851082020",
+      appId: "1:81851082020:web:18f77851d1b24ec6147fb1",
+      measurementId: "G-50BH0CM5F1"
     };
-    window.excluirTransacao = function (i) {
-      if (confirm('Deseja excluir esta transação?')) {
-        transacoes.splice(i, 1);
-        salvar();
-        atualizarResumo();
-        renderizarLista();
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    const msg = document.getElementById('mensagem');
+    const saldoEl = document.getElementById('saldo');
+
+    async function carregarTransacoes() {
+      const lista = document.getElementById('lista-transacoes');
+      lista.innerHTML = '';
+      let saldo = 0;
+      try {
+        const snapshot = await db.collection('transacoes').orderBy('data', 'desc').get();
+        snapshot.forEach(doc => {
+          const t = doc.data();
+          if (t.tipo === 'receita') saldo += t.valor;
+          else saldo -= t.valor;
+
+          const item = document.createElement('div');
+          item.className = 'item';
+          item.innerHTML = `<div><strong>${t.tipo.toUpperCase()}</strong> - R$ ${t.valor} em ${t.data}<br>${t.descricao}</div>`;
+
+          const botoes = document.createElement('div');
+          botoes.className = 'botoes';
+
+          const editarBtn = document.createElement('button');
+          editarBtn.innerText = 'Editar';
+          editarBtn.className = 'editar';
+          editarBtn.onclick = () => editarTransacao(doc.id, t);
+
+          const excluirBtn = document.createElement('button');
+          excluirBtn.innerText = 'Excluir';
+          excluirBtn.className = 'excluir';
+          excluirBtn.onclick = async () => {
+            await db.collection('transacoes').doc(doc.id).delete();
+            carregarTransacoes();
+          };
+
+          botoes.appendChild(editarBtn);
+          botoes.appendChild(excluirBtn);
+          item.appendChild(botoes);
+          lista.appendChild(item);
+        });
+        saldoEl.innerText = `Saldo Atual: R$ ${saldo.toFixed(2)}`;
+      } catch (e) {
+        msg.innerText = 'Erro ao carregar: ' + e.message;
       }
     }
-    form.addEventListener('submit', e => {
-      e.preventDefault();
-      const data = document.getElementById('data').value;
-      const valor = parseFloat(document.getElementById('valor').value);
-      const tipo = document.getElementById('tipo').value;
-      const descricao = document.getElementById('descricao').value;
-      if (editando !== null) {
-        transacoes[editando] = { data, valor, tipo, descricao };
-        editando = null;
-        botao.textContent = 'Adicionar';
-      } else {
-        transacoes.push({ data, valor, tipo, descricao });
+
+    function editarTransacao(id, dados) {
+      const novoValor = prompt('Novo valor:', dados.valor);
+      const novoTipo = prompt('Novo tipo (receita/despesa):', dados.tipo);
+      const novaDescricao = prompt('Nova descrição:', dados.descricao);
+
+      if (novoValor !== null && novaDescricao !== null && novoTipo !== null) {
+        db.collection('transacoes').doc(id).update({
+          valor: parseFloat(novoValor),
+          tipo: novoTipo,
+          descricao: novaDescricao
+        }).then(() => carregarTransacoes());
       }
-      salvar(); atualizarResumo(); renderizarLista(); form.reset();
-      document.getElementById('data').value = getHoje();
-      document.getElementById('valor').value = 100.00;
-      document.getElementById('tipo').value = 'despesa';
-      document.getElementById('descricao').value = 'abastecimento';
+    }
+
+    document.getElementById('form-transacao').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      msg.innerText = '';
+      const nova = {
+        data: document.getElementById('data').value,
+        valor: parseFloat(document.getElementById('valor').value),
+        tipo: document.getElementById('tipo').value,
+        descricao: document.getElementById('descricao').value
+      };
+      msg.innerText = 'Salvando...';
+      try {
+        await db.collection('transacoes').add(nova);
+        msg.innerText = 'Salvo com sucesso!';
+        document.getElementById('form-transacao').reset();
+        carregarTransacoes();
+      } catch (e) {
+        msg.innerText = 'Erro ao salvar: ' + e.message;
+      }
     });
-    atualizarResumo();
-    renderizarLista();
+
+    carregarTransacoes();
   </script>
 </body>
 </html>
